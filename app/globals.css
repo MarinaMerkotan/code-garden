@@ -1,0 +1,226 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background: #070c15;
+  color: #edf2ff;
+  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior: none;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+::selection {
+  background: rgb(99 102 241 / 42%);
+}
+
+.panel {
+  border: 1px solid rgb(255 255 255 / 7.5%);
+  background:
+    linear-gradient(180deg, rgb(22 31 48 / 94%), rgb(11 18 30 / 96%));
+  box-shadow:
+    inset 0 1px rgb(255 255 255 / 2.5%),
+    0 24px 70px -30px rgb(0 0 0 / 80%);
+  backdrop-filter: blur(18px);
+}
+
+.graph-grid {
+  background-image:
+    linear-gradient(rgb(111 130 171 / 5%) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(111 130 171 / 5%) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: radial-gradient(circle at center, black 20%, transparent 78%);
+}
+
+.text-gradient {
+  background: linear-gradient(100deg, #a9b4ff, #947cff 48%, #54d6da);
+  background-clip: text;
+  color: transparent;
+}
+
+.logo-cube {
+  transform: rotate(-4deg);
+}
+
+.loading-orbit {
+  animation: orbit-spin 14s linear infinite;
+}
+
+.loading-orbit.delay-2 {
+  animation-duration: 9s;
+  animation-direction: reverse;
+}
+
+@keyframes orbit-spin {
+  to { transform: rotate(360deg); }
+}
+
+.eyebrow {
+  color: #536079;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.sidebar-item {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 0.6rem;
+  border-radius: 0.5rem;
+  padding: 0.48rem 0.62rem;
+  color: #68758d;
+  font-size: 12px;
+  transition: 150ms ease;
+}
+
+.sidebar-item:hover,
+.sidebar-item-active {
+  background: rgb(255 255 255 / 4%);
+  color: #e4e9f5;
+}
+
+.sidebar-item-active {
+  box-shadow: inset 2px 0 #7464ff;
+}
+
+.metric-number {
+  color: #4b5770;
+  font-family: var(--font-mono), monospace;
+  font-size: 9px;
+}
+
+.source-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  border: 1px solid rgb(255 255 255 / 8%);
+  border-radius: 0.35rem;
+  background: rgb(255 255 255 / 2%);
+  padding: 0.26rem 0.42rem;
+  font-size: 8px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.category-dot {
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 0.16rem;
+  box-shadow: 0 0 8px currentColor;
+}
+
+.category-typescript,
+.category-bar-typescript { background: #458eff; color: #458eff; }
+.category-javascript,
+.category-bar-javascript { background: #edbe42; color: #edbe42; }
+.category-react,
+.category-bar-react { background: #8b78ff; color: #8b78ff; }
+.category-css,
+.category-bar-css { background: #23c8b7; color: #23c8b7; }
+.category-json,
+.category-bar-json { background: #74cf76; color: #74cf76; }
+.category-image,
+.category-bar-image { background: #e55c9d; color: #e55c9d; }
+.category-other,
+.category-bar-other { background: #8790aa; color: #8790aa; }
+
+.control-button {
+  display: grid;
+  width: 2rem;
+  height: 2rem;
+  place-items: center;
+  border-radius: 0.5rem;
+  color: #647088;
+  transition: 150ms ease;
+}
+
+.control-button:hover {
+  background: rgb(255 255 255 / 5%);
+  color: white;
+}
+
+.node-label {
+  pointer-events: none;
+  color: #b3bbcf;
+  font-family: var(--font-mono), monospace;
+  font-size: 10px;
+  text-shadow: 0 2px 8px rgb(0 0 0 / 95%);
+  white-space: nowrap;
+}
+
+.node-tooltip {
+  display: flex;
+  min-width: max-content;
+  flex-direction: column;
+  gap: 0.1rem;
+  border: 1px solid rgb(255 255 255 / 10%);
+  border-radius: 0.45rem;
+  background: rgb(10 16 27 / 95%);
+  padding: 0.35rem 0.55rem;
+  box-shadow: 0 12px 28px rgb(0 0 0 / 45%);
+  font-family: var(--font-mono), monospace;
+  font-size: 9px;
+  text-align: center;
+}
+
+.node-tooltip strong {
+  color: #eff3ff;
+  font-weight: 500;
+}
+
+.node-tooltip span {
+  color: #647088;
+}
+
+.thin-scroll {
+  scrollbar-color: #29354b transparent;
+  scrollbar-width: thin;
+}
+
+.thin-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+
+.thin-scroll::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: #29354b;
+}
+
+@media (max-width: 767px) {
+  .graph-grid { background-size: 36px 36px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

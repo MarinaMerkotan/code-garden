@@ -273,14 +273,67 @@ interface AliasRule {
   targetPrefix: string;
 }
 
+function stripJsonCommentsAndTrailingCommas(input: string) {
+  let output = "";
+  let inString = false;
+  let escaped = false;
+  let lineComment = false;
+  let blockComment = false;
+
+  for (let index = 0; index < input.length; index += 1) {
+    const char = input[index]!;
+    const next = input[index + 1];
+    if (lineComment) {
+      if (char === "\n") {
+        lineComment = false;
+        output += char;
+      }
+      continue;
+    }
+    if (blockComment) {
+      if (char === "*" && next === "/") {
+        blockComment = false;
+        index += 1;
+      } else if (char === "\n") output += char;
+      continue;
+    }
+    if (inString) {
+      output += char;
+      if (escaped) escaped = false;
+      else if (char === "\\") escaped = true;
+      else if (char === '"') inString = false;
+      continue;
+    }
+    if (char === '"') {
+      inString = true;
+      output += char;
+      continue;
+    }
+    if (char === "/" && next === "/") {
+      lineComment = true;
+      index += 1;
+      continue;
+    }
+    if (char === "/" && next === "*") {
+      blockComment = true;
+      index += 1;
+      continue;
+    }
+    if (char === ",") {
+      let cursor = index + 1;
+      while (/\s/.test(input[cursor] ?? "")) cursor += 1;
+      if (input[cursor] === "}" || input[cursor] === "]") continue;
+    }
+    output += char;
+  }
+  return output;
+}
+
 function parseAliasRules(files: RawProjectFile[]) {
   const config = files.find((file) => ["tsconfig.json", "jsconfig.json"].includes(file.path));
   if (!config?.content) return [{ prefix: "@/", targetPrefix: "" }];
   try {
-    const withoutComments = config.content
-      .replace(/\/\*[\s\S]*?\*\//g, "")
-      .replace(/^\s*\/\/.*$/gm, "");
-    const parsed = JSON.parse(withoutComments) as {
+    const parsed = JSON.parse(stripJsonCommentsAndTrailingCommas(config.content)) as {
       compilerOptions?: { baseUrl?: string; paths?: Record<string, string[]> };
     };
     const baseUrl = normalizePath(parsed.compilerOptions?.baseUrl ?? "");

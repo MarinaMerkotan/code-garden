@@ -12,7 +12,7 @@ import {
   ShieldCheck,
   Sparkles,
 } from "lucide-react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import {
   loadDirectoryHandle,
@@ -44,7 +44,17 @@ export function SourceSelector({
 }) {
   const [githubValue, setGithubValue] = useState("");
   const [inputError, setInputError] = useState<string | null>(null);
+  const [hasPrivateDirectoryPicker, setHasPrivateDirectoryPicker] = useState<boolean | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      setHasPrivateDirectoryPicker(
+        typeof (window as DirectoryPickerWindow).showDirectoryPicker === "function",
+      );
+    });
+    return () => cancelAnimationFrame(frame);
+  }, []);
 
   const submitGitHub = (value: string) => {
     const parsed = parseGitHubUrl(value);
@@ -61,7 +71,7 @@ export function SourceSelector({
 
   const openLocalFolder = async () => {
     const browserWindow = window as DirectoryPickerWindow;
-    if (browserWindow.showDirectoryPicker) {
+    if (hasPrivateDirectoryPicker !== false && browserWindow.showDirectoryPicker) {
       try {
         const handle = await browserWindow.showDirectoryPicker({ mode: "read" });
         onRequest({
@@ -70,7 +80,10 @@ export function SourceSelector({
         });
       } catch (caught) {
         if (caught instanceof DOMException && caught.name === "AbortError") return;
-        setInputError("The folder could not be opened. Try the browser fallback below.");
+        setHasPrivateDirectoryPicker(false);
+        setInputError(
+          "The private folder picker is unavailable. Click the folder button again to use compatibility mode; files will still stay on this device.",
+        );
       }
       return;
     }
@@ -189,16 +202,21 @@ export function SourceSelector({
               className="flex h-[108px] w-full flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-cyan-300/20 bg-cyan-400/[0.025] text-center transition hover:border-cyan-300/45 hover:bg-cyan-400/[0.05]"
             >
               <FolderOpen className="size-6 text-cyan-300" />
-              <span className="text-sm font-semibold">Choose project folder</span>
-              <span className="text-xs text-slate-500">Read-only access</span>
+              <span className="text-sm font-semibold">Open project folder privately</span>
+              <span className="text-xs text-slate-500">
+                {hasPrivateDirectoryPicker
+                  ? "Recommended · read-only · no upload dialog"
+                  : hasPrivateDirectoryPicker === false
+                    ? "Compatibility mode · files still stay on this device"
+                    : "Checking private folder access…"}
+              </span>
             </button>
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              className="mt-3 flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-cyan-300/20 bg-cyan-400/8 text-sm font-semibold text-cyan-200 transition hover:bg-cyan-400/12"
-            >
-              <FolderOpen className="size-4" /> Browser fallback
-            </button>
+            {hasPrivateDirectoryPicker === false ? (
+              <p className="mt-3 rounded-lg border border-cyan-300/10 bg-cyan-400/[0.025] px-3 py-2 text-[10px] leading-4 text-slate-500">
+                Your browser may use the word “upload” in its compatibility dialog. RepoSphere
+                does not transmit the selected files: scanning and analysis remain local.
+              </p>
+            ) : null}
             <input
               ref={fileInputRef}
               type="file"
@@ -206,10 +224,11 @@ export function SourceSelector({
               className="hidden"
               {...({ webkitdirectory: "", directory: "" } as Record<string, string>)}
               onChange={(event) => {
-                const files = event.currentTarget.files;
-                if (!files?.length) return;
+                const files = Array.from(event.currentTarget.files ?? []);
+                if (!files.length) return;
                 const name = files[0]?.webkitRelativePath.split("/")[0] || "local-project";
                 onRequest({ label: name, run: (report: (progress: LoadProgress) => void) => loadFileList(files, report) });
+                event.currentTarget.value = "";
               }}
             />
           </motion.article>

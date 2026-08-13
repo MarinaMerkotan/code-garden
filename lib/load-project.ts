@@ -13,6 +13,8 @@ export interface LoadProgress {
   stage: "reading" | "mapping" | "detecting" | "dependencies" | "layout" | "building";
   label: string;
   detail?: string;
+  current?: number;
+  total?: number;
 }
 
 export type ProgressReporter = (progress: LoadProgress) => void;
@@ -95,6 +97,8 @@ export async function loadGitHubProject(
       stage: "detecting",
       label: "Reading source files…",
       detail: `${Math.min(start + batch.length, contentCandidates.length).toLocaleString()} / ${contentCandidates.length.toLocaleString()} analyzed`,
+      current: Math.min(start + batch.length, contentCandidates.length),
+      total: contentCandidates.length,
     });
   }
 
@@ -128,6 +132,7 @@ export async function loadDirectoryHandle(
   report: ProgressReporter,
 ): Promise<RawProject> {
   report({ stage: "reading", label: "Reading local project…", detail: handle.name });
+  await yieldToBrowser();
   const files: RawProjectFile[] = [];
 
   const walk = async (directory: DirectoryHandleLike, parentPath: string) => {
@@ -147,6 +152,7 @@ export async function loadDirectoryHandle(
       });
       if (files.length % 100 === 0) {
         report({ stage: "mapping", label: "Mapping file structure…", detail: `${files.length.toLocaleString()} files` });
+        await yieldToBrowser();
       }
     }
   };
@@ -161,11 +167,18 @@ export async function loadDirectoryHandle(
   };
 }
 
-export async function loadFileList(filesList: FileList, report: ProgressReporter): Promise<RawProject> {
+export async function loadFileList(filesList: FileList | File[], report: ProgressReporter): Promise<RawProject> {
   const browserFiles = Array.from(filesList);
   const firstPath = browserFiles[0]?.webkitRelativePath || browserFiles[0]?.name || "local-project";
   const folderName = normalizePath(firstPath).split("/")[0] || "local-project";
-  report({ stage: "reading", label: "Reading local project…", detail: folderName });
+  report({
+    stage: "reading",
+    label: "Preparing selected files…",
+    detail: `${browserFiles.length.toLocaleString()} entries selected · processed locally`,
+    current: 0,
+    total: browserFiles.length,
+  });
+  await yieldToBrowser();
 
   const files: RawProjectFile[] = [];
   for (let index = 0; index < browserFiles.length; index += 1) {
@@ -180,8 +193,14 @@ export async function loadFileList(filesList: FileList, report: ProgressReporter
       content: shouldReadText(path, file.size) ? await file.text() : undefined,
     });
     if (index > 0 && index % 100 === 0) {
-      report({ stage: "mapping", label: "Mapping file structure…", detail: `${index.toLocaleString()} files` });
-      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      report({
+        stage: "mapping",
+        label: "Mapping file structure…",
+        detail: `${files.length.toLocaleString()} project files kept · ${index.toLocaleString()} checked`,
+        current: index,
+        total: browserFiles.length,
+      });
+      await yieldToBrowser();
     }
   }
 
@@ -192,6 +211,10 @@ export async function loadFileList(filesList: FileList, report: ProgressReporter
     source: { kind: "local", folderName },
     files,
   };
+}
+
+function yieldToBrowser() {
+  return new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 }
 
 function contentPriority(path: string) {

@@ -3,6 +3,7 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { Check, LoaderCircle } from "lucide-react";
 import { useCallback, useState } from "react";
+import { flushSync } from "react-dom";
 
 import { RepositoryExplorer } from "@/components/repository-explorer";
 import { SourceSelector, type LoadRequest } from "@/components/source-selector";
@@ -41,11 +42,17 @@ export function RepoSphereApp() {
   const [error, setError] = useState<string | null>(null);
 
   const startLoad = useCallback(async (request: LoadRequest) => {
-    setError(null);
-    setProgress({ stage: "reading", label: "Preparing project…", detail: request.label });
-    setPhase("loading");
+    flushSync(() => {
+      setError(null);
+      setProgress({ stage: "reading", label: "Preparing project…", detail: request.label });
+      setPhase("loading");
+    });
 
     try {
+      // Let the new loading screen paint before a large local directory walk begins.
+      await new Promise<void>((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+      });
       const raw = await request.run(setProgress);
       setProgress({
         stage: "dependencies",
@@ -95,6 +102,9 @@ export function RepoSphereApp() {
 
 function LoadingView({ progress }: { progress: LoadProgress }) {
   const activeIndex = STAGES.indexOf(progress.stage);
+  const percentage = progress.total && progress.current !== undefined
+    ? Math.min(100, Math.round((progress.current / progress.total) * 100))
+    : null;
   return (
     <motion.section
       initial={{ opacity: 0 }}
@@ -118,6 +128,22 @@ function LoadingView({ progress }: { progress: LoadProgress }) {
             {progress.detail ? <p className="mt-1 truncate font-mono text-xs text-slate-400">{progress.detail}</p> : null}
           </div>
         </div>
+
+        {percentage !== null ? (
+          <div className="mb-5">
+            <div className="mb-1.5 flex items-center justify-between font-mono text-[10px] text-slate-500">
+              <span>Processing progress</span>
+              <span>{percentage}%</span>
+            </div>
+            <div className="h-1.5 overflow-hidden rounded-full bg-white/[0.06]">
+              <motion.div
+                className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-cyan-400"
+                animate={{ width: `${percentage}%` }}
+                transition={{ duration: 0.2, ease: "easeOut" }}
+              />
+            </div>
+          </div>
+        ) : null}
 
         <ol className="space-y-2">
           {STAGES.map((stage, index) => (

@@ -43,11 +43,32 @@ test("ignored generated directories never leak into the project model", () => {
 
 test("standard aliases resolve only when a real target exists", () => {
   const model = buildProjectModel(localProject("aliases", [
-    { path: "tsconfig.json", size: 85, content: JSON.stringify({ compilerOptions: { baseUrl: ".", paths: { "@/*": ["src/*"] } } }) },
+    { path: "tsconfig.json", size: 150, content: `{
+      // Globs inside strings must not be treated as block comments.
+      "compilerOptions": { "baseUrl": ".", "paths": { "@/*": ["src/*"], }, },
+      "include": ["**/*.ts", "**/*.tsx"],
+    }` },
     { path: "src/page.tsx", size: 70, content: "import { Button } from '@/components/Button';\nimport Missing from '@/missing';" },
     { path: "src/components/Button.tsx", size: 45, content: "export const Button = () => null;" },
   ]));
 
   assert.equal(model.tree.stats.dependencies, 1);
   assert.deepEqual(model.tree.nodes["file:src/page.tsx"]?.unresolvedImports, ["@/missing"]);
+});
+
+test("multiple disconnected import groups and standalone files remain in the model", () => {
+  const model = buildProjectModel(localProject("full-stack", [
+    { path: "app/page.tsx", size: 70, content: "import Header from '@/components/header';\nimport { format } from '@/lib/format';" },
+    { path: "components/header.tsx", size: 40, content: "export default function Header() { return null; }" },
+    { path: "lib/format.ts", size: 35, content: "export const format = () => 'ok';" },
+    { path: "server/route.ts", size: 60, content: "import { db } from './db';\nexport const route = db;" },
+    { path: "server/db.ts", size: 30, content: "export const db = {};" },
+    { path: "scripts/standalone.ts", size: 20, content: "export const task = true;" },
+  ]));
+
+  assert.equal(model.tree.stats.files, 6);
+  assert.equal(model.tree.stats.dependencies, 3);
+  assert.equal(model.graph.importsOf["file:app/page.tsx"]?.length, 2);
+  assert.equal(model.graph.importsOf["file:server/route.ts"]?.length, 1);
+  assert.ok(model.tree.nodes["file:scripts/standalone.ts"]);
 });

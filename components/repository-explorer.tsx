@@ -8,6 +8,7 @@ import {
   ChevronDown,
   ChevronRight,
   CircleDot,
+  CornerUpLeft,
   Expand,
   File,
   FileCode2,
@@ -15,9 +16,12 @@ import {
   GitBranch,
   Github,
   HardDrive,
+  House,
   LayoutList,
   ListTree,
   Maximize2,
+  Minimize2,
+  MousePointerClick,
   Network,
   PieChart,
   RotateCcw,
@@ -27,7 +31,11 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { RepositoryScene, type CameraCommand } from "@/components/repository-scene";
+import {
+  RepositoryScene,
+  getVisibleNodeIds,
+  type CameraCommand,
+} from "@/components/repository-scene";
 import {
   CATEGORY_LABEL,
   breadcrumbFor,
@@ -52,19 +60,36 @@ export function RepositoryExplorer({
   onChooseAnother: () => void;
 }) {
   const [activeFolderId, setActiveFolderId] = useState(model.tree.rootId);
-  const [selectedId, setSelectedId] = useState<string | null>(model.tree.rootId);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [filter, setFilter] = useState<FileCategory | "all">("all");
   const [query, setQuery] = useState("");
   const [view, setView] = useState<ViewMode>("graph");
   const [section, setSection] = useState<Section>("explorer");
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const [cameraCommand, setCameraCommand] = useState<CameraCommand>({ type: "reset", nonce: 0 });
   const shellRef = useRef<HTMLDivElement>(null);
+  const dependenciesMode = section === "dependencies";
   const counts = useMemo(() => categoryCounts(model.tree), [model]);
   const selectedNode = selectedId ? model.tree.nodes[selectedId] : undefined;
+  const activeFolder = model.tree.nodes[activeFolderId];
+  const parentFolder = activeFolder?.parentId ? model.tree.nodes[activeFolder.parentId] : undefined;
+  const activeSubtreeCount = useMemo(
+    () => descendantsOf(model.tree, activeFolderId).length + 1,
+    [model, activeFolderId],
+  );
+  const visibleSceneIds = useMemo(
+    () => getVisibleNodeIds(model, activeFolderId, selectedId, dependenciesMode),
+    [model, activeFolderId, selectedId, dependenciesMode],
+  );
+  const visibleSceneCount = visibleSceneIds.size;
+  const visibleDependencyCount = useMemo(
+    () => model.graph.edges.filter((edge) => visibleSceneIds.has(edge.from) && visibleSceneIds.has(edge.to)).length,
+    [model, visibleSceneIds],
+  );
   const crumbs = useMemo(
-    () => breadcrumbFor(model.tree, selectedId ?? activeFolderId),
-    [model, selectedId, activeFolderId],
+    () => breadcrumbFor(model.tree, activeFolderId),
+    [model, activeFolderId],
   );
   const searchResults = useMemo(() => {
     const term = query.trim().toLowerCase();
@@ -89,10 +114,32 @@ export function RepositoryExplorer({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [selectedId, activeFolderId, model]);
 
+  useEffect(() => {
+    const syncFullscreenState = () => {
+      setIsFullscreen(document.fullscreenElement === shellRef.current);
+    };
+    document.addEventListener("fullscreenchange", syncFullscreenState);
+    return () => document.removeEventListener("fullscreenchange", syncFullscreenState);
+  }, []);
+
+  const toggleFullscreen = async () => {
+    if (document.fullscreenElement) {
+      await document.exitFullscreen();
+      return;
+    }
+    await shellRef.current?.requestFullscreen?.();
+  };
+
   const selectSearchResult = (node: ProjectNode) => {
     setSelectedId(node.id);
     setActiveFolderId(node.kind === "folder" ? node.id : node.parentId ?? model.tree.rootId);
     setQuery("");
+  };
+
+  const focusFolder = (id: string) => {
+    setActiveFolderId(id);
+    setSelectedId(null);
+    setHoveredId(null);
   };
 
   return (
@@ -110,7 +157,13 @@ export function RepositoryExplorer({
         view={view}
         setView={setView}
         section={section}
-        setSection={setSection}
+        setSection={(nextSection) => {
+          setSection(nextSection);
+          if (nextSection === "dependencies") {
+            setView("graph");
+            if (selectedNode?.kind === "folder") setSelectedId(null);
+          }
+        }}
         onChooseAnother={onChooseAnother}
       />
 
@@ -168,16 +221,17 @@ export function RepositoryExplorer({
           </div>
 
           <button
-            onClick={() => shellRef.current?.requestFullscreen?.()}
-            aria-label="Fullscreen"
+            onClick={toggleFullscreen}
+            aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+            title={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
             className="grid size-9 shrink-0 place-items-center rounded-lg border border-white/[0.07] text-slate-500 hover:bg-white/[0.04] hover:text-white"
           >
-            <Maximize2 className="size-4" />
+            {isFullscreen ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
           </button>
         </header>
 
         <div className="flex min-h-0 flex-1">
-          <div className="relative min-w-0 flex-1">
+          <div className="relative min-w-0 flex-1 select-none">
             <RepositoryScene
               model={model}
               activeFolderId={activeFolderId}
@@ -185,15 +239,68 @@ export function RepositoryExplorer({
               hoveredId={hoveredId}
               filter={filter}
               query={query}
-              dependenciesMode={section === "dependencies"}
+              dependenciesMode={dependenciesMode}
               cameraCommand={cameraCommand}
               onHover={setHoveredId}
               onSelect={setSelectedId}
               onEnterFolder={(id) => {
-                setActiveFolderId(id);
-                setSelectedId(id);
+                focusFolder(id);
               }}
             />
+
+            <div className="panel absolute left-4 top-4 z-20 flex max-w-[calc(100%-2rem)] items-center gap-1.5 rounded-xl p-1.5 shadow-xl">
+              {parentFolder ? (
+                <button
+                  type="button"
+                  onClick={() => focusFolder(parentFolder.id)}
+                  title={`Back to ${parentFolder.name}`}
+                  className="flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-[10px] text-slate-400 transition hover:bg-white/[0.05] hover:text-white"
+                >
+                  <CornerUpLeft className="size-3.5" />
+                  Up one level
+                </button>
+              ) : null}
+              {activeFolderId !== model.tree.rootId ? (
+                <button
+                  type="button"
+                  onClick={() => focusFolder(model.tree.rootId)}
+                  title="Back to project root"
+                  className="grid size-8 place-items-center rounded-lg text-slate-500 transition hover:bg-white/[0.05] hover:text-white"
+                >
+                  <House className="size-3.5" />
+                </button>
+              ) : null}
+              <span className="min-w-0 border-l border-white/[0.07] px-2.5 text-[10px] text-slate-500">
+                <span className="block truncate font-mono text-slate-300">
+                  {dependenciesMode
+                    ? selectedNode?.kind === "file" ? `Imports: ${selectedNode.name}` : "Dependency map"
+                    : activeFolderId === model.tree.rootId ? "Project overview" : `Focused: ${activeFolder?.name ?? "folder"}`}
+                </span>
+                <span className="block truncate text-[9px] text-slate-600">
+                  {dependenciesMode
+                    ? `${visibleSceneCount.toLocaleString()} files · ${visibleDependencyCount.toLocaleString()} import links`
+                    : visibleSceneCount < activeSubtreeCount
+                    ? `${visibleSceneCount.toLocaleString()} of ${activeSubtreeCount.toLocaleString()} nodes shown · optimized view`
+                    : `All ${activeSubtreeCount.toLocaleString()} nodes shown`}
+                </span>
+              </span>
+            </div>
+
+            {dependenciesMode ? (
+              <div className="panel absolute left-4 top-20 z-20 w-[250px] rounded-xl p-3 shadow-xl">
+                <div className="flex items-center gap-2 text-[10px] font-medium text-slate-300">
+                  <Share2 className="size-3.5 text-indigo-300" />
+                  File import relationships
+                </div>
+                <p className="mt-1.5 text-[9px] leading-4 text-slate-600">
+                  Arrows point from the importing file to the file it uses. Select a file to isolate its dependency neighborhood.
+                </p>
+                <div className="mt-2.5 flex items-center gap-4 border-t border-white/[0.06] pt-2 text-[9px] text-slate-500">
+                  <span className="flex items-center gap-1.5"><span className="text-violet-300">→</span> Imports</span>
+                  <span className="flex items-center gap-1.5"><span className="text-cyan-300">→</span> Imported by</span>
+                </div>
+              </div>
+            ) : null}
 
             {view !== "graph" ? (
               <ProjectListOverlay
@@ -213,6 +320,7 @@ export function RepositoryExplorer({
               <div className="panel pointer-events-auto flex items-center gap-1 rounded-xl p-1.5 shadow-xl">
                 <Hint icon={<CircleDot className="size-3.5" />} label="Drag to rotate" />
                 <Hint icon={<Expand className="size-3.5" />} label="Scroll to zoom" />
+                <Hint icon={<MousePointerClick className="size-3.5" />} label="Double-click folder to open" />
                 <button onClick={() => setCameraCommand({ type: "reset", nonce: Date.now() })} title="Reset camera" className="control-button"><RotateCcw className="size-3.5" /></button>
                 <button onClick={() => setCameraCommand({ type: "fit", nonce: Date.now() })} title="Fit graph" className="control-button"><Maximize2 className="size-3.5" /></button>
               </div>
@@ -222,6 +330,7 @@ export function RepositoryExplorer({
           <Inspector
             model={model}
             node={selectedNode}
+            dependenciesMode={dependenciesMode}
             onClose={() => setSelectedId(null)}
             onSelect={(node) => {
               setSelectedId(node.id);
@@ -305,8 +414,8 @@ function Metric({ icon, value }: { icon: React.ReactNode; value: string }) {
   return <span className="flex items-center gap-1.5"><span className="text-slate-600">{icon}</span><span className="font-mono text-slate-300">{value}</span></span>;
 }
 
-function Inspector({ model, node, onClose, onSelect }: { model: ProjectModel; node?: ProjectNode; onClose: () => void; onSelect: (node: ProjectNode) => void }) {
-  if (!node) return <aside className="hidden w-[310px] shrink-0 border-l border-white/[0.07] bg-[#0b121e] p-5 xl:block"><p className="eyebrow">Inspector</p><p className="mt-3 text-sm leading-6 text-slate-500">Select any real file or folder in the graph to inspect its path, size, imports, and dependents.</p></aside>;
+function Inspector({ model, node, dependenciesMode, onClose, onSelect }: { model: ProjectModel; node?: ProjectNode; dependenciesMode: boolean; onClose: () => void; onSelect: (node: ProjectNode) => void }) {
+  if (!node) return <aside className="hidden w-[310px] shrink-0 border-l border-white/[0.07] bg-[#0b121e] p-5 xl:block"><p className="eyebrow">{dependenciesMode ? "Dependency inspector" : "Inspector"}</p><p className="mt-3 text-sm leading-6 text-slate-500">{dependenciesMode ? "Select a file in the import map to trace what it imports and which files depend on it." : "Select any real file or folder in the graph to inspect its path, size, imports, and dependents."}</p></aside>;
   const imports = model.graph.importsOf[node.id] ?? [];
   const importedBy = model.graph.importedBy[node.id] ?? [];
   return (
@@ -366,7 +475,7 @@ function Empty({ children }: { children: React.ReactNode }) {
 function ProjectListOverlay({ model, rootId, flat, onSelect }: { model: ProjectModel; rootId: string; flat: boolean; onSelect: (node: ProjectNode) => void }) {
   const ids = flat ? descendantsOf(model.tree, rootId).slice(0, 800) : (model.tree.nodes[rootId]?.childIds ?? []);
   return (
-    <div className="panel thin-scroll absolute left-4 top-4 z-10 max-h-[72%] w-[310px] overflow-y-auto rounded-xl p-2 shadow-2xl">
+    <div className="panel thin-scroll absolute left-4 top-20 z-10 max-h-[64%] w-[310px] overflow-y-auto rounded-xl p-2 shadow-2xl">
       <div className="flex items-center justify-between px-2 py-1.5"><p className="eyebrow">{flat ? "List" : "Tree"} view</p><span className="font-mono text-[9px] text-slate-600">{ids.length} shown</span></div>
       {ids.map((id) => { const node = model.tree.nodes[id]; return node ? <NodeButton key={id} node={node} onClick={() => onSelect(node)} /> : null; })}
     </div>
